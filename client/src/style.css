@@ -1986,7 +1986,6 @@ html {
   -webkit-box-shadow: 0 0 0 50vh #0d0d0d inset;
 }
 
-body {
-  font-size: 1vw;
-  min-font-size: 18px;
+html {
+  font-size: max(18px, 1vw);
 }
