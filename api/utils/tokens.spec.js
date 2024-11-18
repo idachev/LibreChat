@@ -1,5 +1,5 @@
 const { EModelEndpoint } = require('librechat-data-provider');
-const { getModelMaxTokens, matchModelName, maxTokensMap } = require('./tokens');
+const { getModelMaxTokens, processModelData, matchModelName, maxTokensMap } = require('./tokens');
 
 describe('getModelMaxTokens', () => {
   test('should return correct tokens for exact match', () => {
@@ -18,18 +18,6 @@ describe('getModelMaxTokens', () => {
     expect(getModelMaxTokens('openai/gpt-4-32k')).toBe(
       maxTokensMap[EModelEndpoint.openAI]['gpt-4-32k'],
     );
-  });
-
-  test('should return correct tokens for LLama 3 models', () => {
-    expect(getModelMaxTokens('meta-llama/llama-3-8b')).toBe(
-      maxTokensMap[EModelEndpoint.openAI]['llama-3'],
-    );
-    expect(getModelMaxTokens('meta-llama/llama-3-8b')).toBe(
-      maxTokensMap[EModelEndpoint.openAI]['llama3'],
-    );
-    expect(getModelMaxTokens('llama-3-500b')).toBe(maxTokensMap[EModelEndpoint.openAI]['llama-3']);
-    expect(getModelMaxTokens('llama3-70b')).toBe(maxTokensMap[EModelEndpoint.openAI]['llama3']);
-    expect(getModelMaxTokens('llama3:latest')).toBe(maxTokensMap[EModelEndpoint.openAI]['llama3']);
   });
 
   test('should return undefined for no match', () => {
@@ -124,12 +112,29 @@ describe('getModelMaxTokens', () => {
       'claude-1-100k',
       'claude-instant-1',
       'claude-instant-1-100k',
+      'claude-3-haiku',
+      'claude-3-sonnet',
+      'claude-3-opus',
+      'claude-3-5-sonnet',
     ];
 
-    const claudeMaxTokens = maxTokensMap[EModelEndpoint.anthropic]['claude-'];
-    const claude21MaxTokens = maxTokensMap[EModelEndpoint.anthropic]['claude-2.1'];
+    const maxTokens = {
+      'claude-': maxTokensMap[EModelEndpoint.anthropic]['claude-'],
+      'claude-2.1': maxTokensMap[EModelEndpoint.anthropic]['claude-2.1'],
+      'claude-3': maxTokensMap[EModelEndpoint.anthropic]['claude-3-sonnet'],
+    };
+
     models.forEach((model) => {
-      const expectedTokens = model === 'claude-2.1' ? claude21MaxTokens : claudeMaxTokens;
+      let expectedTokens;
+
+      if (model === 'claude-2.1') {
+        expectedTokens = maxTokens['claude-2.1'];
+      } else if (model.startsWith('claude-3')) {
+        expectedTokens = maxTokens['claude-3'];
+      } else {
+        expectedTokens = maxTokens['claude-'];
+      }
+
       expect(getModelMaxTokens(model, EModelEndpoint.anthropic)).toEqual(expectedTokens);
     });
   });
@@ -310,5 +315,120 @@ describe('matchModelName', () => {
   it('should return the closest matching key for partial matches - Google models', () => {
     expect(matchModelName('code-', EModelEndpoint.google)).toBe('code-');
     expect(matchModelName('chat-', EModelEndpoint.google)).toBe('chat-');
+  });
+});
+
+describe('Meta Models Tests', () => {
+  describe('getModelMaxTokens', () => {
+    test('should return correct tokens for LLaMa 2 models', () => {
+      expect(getModelMaxTokens('llama2')).toBe(4000);
+      expect(getModelMaxTokens('llama2.70b')).toBe(4000);
+      expect(getModelMaxTokens('llama2-13b')).toBe(4000);
+      expect(getModelMaxTokens('llama2-70b')).toBe(4000);
+    });
+
+    test('should return correct tokens for LLaMa 3 models', () => {
+      expect(getModelMaxTokens('llama3')).toBe(8000);
+      expect(getModelMaxTokens('llama3.8b')).toBe(8000);
+      expect(getModelMaxTokens('llama3.70b')).toBe(8000);
+      expect(getModelMaxTokens('llama3-8b')).toBe(8000);
+      expect(getModelMaxTokens('llama3-70b')).toBe(8000);
+    });
+
+    test('should return correct tokens for LLaMa 3.1 models', () => {
+      expect(getModelMaxTokens('llama3.1:8b')).toBe(127500);
+      expect(getModelMaxTokens('llama3.1:70b')).toBe(127500);
+      expect(getModelMaxTokens('llama3.1:405b')).toBe(127500);
+      expect(getModelMaxTokens('llama3-1-8b')).toBe(127500);
+      expect(getModelMaxTokens('llama3-1-70b')).toBe(127500);
+      expect(getModelMaxTokens('llama3-1-405b')).toBe(127500);
+    });
+
+    test('should handle partial matches for Meta models', () => {
+      // Test with full model names
+      expect(getModelMaxTokens('meta/llama3.1:405b')).toBe(127500);
+      expect(getModelMaxTokens('meta/llama3.1:70b')).toBe(127500);
+      expect(getModelMaxTokens('meta/llama3.1:8b')).toBe(127500);
+      expect(getModelMaxTokens('meta/llama3-1-8b')).toBe(127500);
+
+      // Test base versions
+      expect(getModelMaxTokens('meta/llama3.1')).toBe(127500);
+      expect(getModelMaxTokens('meta/llama3-1')).toBe(127500);
+      expect(getModelMaxTokens('meta/llama3')).toBe(8000);
+      expect(getModelMaxTokens('meta/llama2')).toBe(4000);
+    });
+
+    test('should match Deepseek model variations', () => {
+      expect(getModelMaxTokens('deepseek-chat')).toBe(127500);
+      expect(getModelMaxTokens('deepseek-coder')).toBe(127500);
+    });
+  });
+
+  describe('matchModelName', () => {
+    test('should match exact LLaMa model names', () => {
+      expect(matchModelName('llama2')).toBe('llama2');
+      expect(matchModelName('llama3')).toBe('llama3');
+      expect(matchModelName('llama3.1:8b')).toBe('llama3.1:8b');
+    });
+
+    test('should match LLaMa model variations', () => {
+      // Test full model names
+      expect(matchModelName('meta/llama3.1:405b')).toBe('llama3.1:405b');
+      expect(matchModelName('meta/llama3.1:70b')).toBe('llama3.1:70b');
+      expect(matchModelName('meta/llama3.1:8b')).toBe('llama3.1:8b');
+      expect(matchModelName('meta/llama3-1-8b')).toBe('llama3-1-8b');
+
+      // Test base versions
+      expect(matchModelName('meta/llama3.1')).toBe('llama3.1');
+      expect(matchModelName('meta/llama3-1')).toBe('llama3-1');
+    });
+
+    test('should handle custom endpoint for Meta models', () => {
+      expect(matchModelName('llama2', EModelEndpoint.bedrock)).toBe('llama2');
+      expect(matchModelName('llama3', EModelEndpoint.bedrock)).toBe('llama3');
+      expect(matchModelName('llama3.1:8b', EModelEndpoint.bedrock)).toBe('llama3.1:8b');
+    });
+
+    test('should match Deepseek model variations', () => {
+      expect(matchModelName('deepseek-chat')).toBe('deepseek');
+      expect(matchModelName('deepseek-coder')).toBe('deepseek');
+    });
+  });
+
+  describe('processModelData with Meta models', () => {
+    test('should process Meta model data correctly', () => {
+      const input = {
+        data: [
+          {
+            id: 'llama2',
+            pricing: {
+              prompt: '0.00001',
+              completion: '0.00003',
+            },
+            context_length: 4000,
+          },
+          {
+            id: 'llama3',
+            pricing: {
+              prompt: '0.00002',
+              completion: '0.00004',
+            },
+            context_length: 8000,
+          },
+        ],
+      };
+
+      const result = processModelData(input);
+      expect(result.llama2).toEqual({
+        prompt: 10,
+        completion: 30,
+        context: 4000,
+      });
+      expect(result.llama3).toEqual({
+        prompt: 20,
+        completion: 40,
+        context: 8000,
+      });
+    });
   });
 });
